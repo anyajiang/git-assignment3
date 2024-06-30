@@ -1,12 +1,12 @@
-
 library(shiny)
+library(shinyjs)
 library(openai)
 
 Sys.setenv(OPENAI_API_KEY = 'XXXXXX')
 
-chatHist <- reactiveVal(list())
 AI_content <- reactiveVal(list())
 loaded_text <- reactiveVal()
+
 
 ui <- fluidPage(
   tags$head(
@@ -42,7 +42,10 @@ ui <- fluidPage(
           actionButton("example", "Example Query"),
           actionButton("run_query", "Run Query")
       ), 
-      actionButton("clear", "Clear Input and Response")
+      div(style = "display: flex;",
+          actionButton("stop", "Stop Generating"),
+          actionButton("clear", "Clear")
+      ) 
     ),
     mainPanel(
       fluidRow(
@@ -52,6 +55,7 @@ ui <- fluidPage(
         column(6, fileInput("file", "Input Prompt File"))
       ), 
       actionButton("prompt", "Show Prompt"), 
+      actionButton("copy_response", "Copy Response"),
       titlePanel("Response"), 
       verbatimTextOutput("assistant")
     )
@@ -59,34 +63,49 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
+  observe({
+    req(input$file)
+    text <- readLines(input$file$datapath)
+    loaded_text(text)
+    
+    #toggleState("run_query", input$run_query == "" | is.null(input$run_query))
+    
+    assistant_response <- AI_content()
+    output$assistant <- renderText({
+      if (length(assistant_response) == 0) {
+        "\n\nType a message and click submit to start"
+      } else {
+        paste0("\n", assistant_response$choices$message.content, "\n\nYour Input: ", assistant_response$user_message, "\n\nModel: ", assistant_response$model, "\n\nToken use: ", assistant_response$usage$total_tokens)
+      }
+    })
+  })
   
   observeEvent(input$clear, {
-    chatHist(list())
     AI_content(list())
     updateTextAreaInput(session, "geneMessage", value = "")
   })
   
   observeEvent(input$run_query, {
+    output$assistant <- renderText({""})
+    #disable("run_query")
     prompt_text <- paste(loaded_text(), collapse = "\n")
     user_message <- input$geneMessage
     AI_content(list())
-    chat_history <- chatHist() 
-    chat_history <- append(chat_history, list(list("role" = "user", "content" = prompt_text), list("role" = "user", "content" = user_message)))
-    
+   
     withProgress(message = 'Generating response using OpenAI...', value = 0, {
       assistant_response <- create_chat_completion(
         model = input$model,
-        messages = chat_history,
+        messages = list(list("role" = "user", "content" = prompt_text), list("role" = "user", "content" = user_message)),
         temperature = input$temperature,
         openai_api_key = Sys.getenv("openai_api_key")
       )
     })
     
-    assistant_content <- assistant_response$choices
-    chat_history <- append(chat_history, list(list("role" = "assistant", "content" = assistant_content$message.content)))
-    chatHist(chat_history)
+    #enable("run_query")
+  
     assistant_response$user_message <- user_message
     AI_content(assistant_response)
+    
   })
   
   observeEvent(input$example, {
@@ -102,7 +121,7 @@ server <- function(input, output, session) {
         modalButton("Close")
       )
     ))
-    output$file_content <- renderText({ paste(loaded_text(), collapse = "\n") })
+    output$file_content <- renderText({ paste(paste(loaded_text(), collapse = "\n"), input$geneMessage) })
   })
   
   observeEvent(input$copy_prompt, {
@@ -110,22 +129,16 @@ server <- function(input, output, session) {
     session$sendCustomMessage(type = "copyToClipboard", message = paste(loaded_text(), collapse = "\n"))
   })
   
-  observe({
-    req(input$file)
-    text <- readLines(input$file$datapath)
-    loaded_text(text)
-    
-    chat_history <- chatHist() 
+  observeEvent(input$copy_response, {
+    req(AI_content())
     assistant_response <- AI_content()
-    assistant_content <- assistant_response$choices
-    output$assistant <- renderText({
-      if (length(assistant_response) == 0) {
-        "\n\nType a message and click submit to start"
-      } else {
-        paste0("\n", assistant_content$message.content, "\n\nYour Input: ", assistant_response$user_message, "\n\nModel: ", assistant_response$model, "\n\nToken use: ", assistant_response$usage$total_tokens)
-      }
-    })
+    session$sendCustomMessage(type = "copyToClipboard", message = paste0("\n", assistant_response$choices$message.content, "\n\nYour Input: ", assistant_response$user_message, "\n\nModel: ", assistant_response$model, "\n\nToken use: ", assistant_response$usage$total_tokens))
   })
+  
+  observeEvent(input$stop, {
+    
+  })
+  
 }
 
 shinyApp(ui, server)
