@@ -5,7 +5,7 @@ library(openai)
 AI_content <- reactiveVal(list())
 loaded_text <- reactiveVal()
 
-Sys.setenv(OPENAI_API_KEY = 'XXXXXX')
+Sys.setenv(OPENAI_API_KEY = 'XXXXXXX')
 Sys.setenv(DEFAULT_PROMPT = 'prompt.txt')
 
 
@@ -52,7 +52,7 @@ ui <- fluidPage(
         column(3, selectizeInput("model", label = "Select Model", 
                                  choices = c("gpt-4o", "gpt-4", "gpt-3.5-turbo"), 
                                  selected = "gpt-4o", multiple = FALSE)),
-        column(3, fileInput("file", "Input Prompt File")), 
+        column(3, fileInput("file", "Input Prompt File (Optional)")), 
         column(3, offset = 3, actionButton("help", "Help")) #style = "margin-top: -60px; margin-left: 300px;"))
       ), 
       actionButton("prompt", "Show Prompt"), 
@@ -101,7 +101,7 @@ server <- function(input, output, session) {
         model = input$model,
         messages = list(list("role" = "user", "content" = prompt_text), list("role" = "user", "content" = user_message)),
         temperature = input$temperature,
-        openai_api_key = "XXXXXX"
+        openai_api_key = "XXXXXXXX"
       )
     })
     
