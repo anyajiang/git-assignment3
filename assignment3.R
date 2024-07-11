@@ -2,10 +2,11 @@ library(shiny)
 library(shinyjs)
 library(openai)
 
-Sys.setenv(OPENAI_API_KEY = 'XXXXXX')
-
 AI_content <- reactiveVal(list())
 loaded_text <- reactiveVal()
+
+Sys.setenv(OPENAI_API_KEY = 'XXXXXX')
+Sys.setenv(DEFAULT_PROMPT = 'prompt.txt')
 
 
 ui <- fluidPage(
@@ -13,11 +14,11 @@ ui <- fluidPage(
     tags$script(src = "https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js"),
     tags$style(HTML("
       #assistant {
-        white-space: pre-wrap;       /* CSS3 */
-        white-space: -moz-pre-wrap;  /* Firefox */
-        white-space: -pre-wrap;      /* Opera <7 */
-        white-space: -o-pre-wrap;    /* Opera 7 */
-        word-wrap: break-word;       /* IE */
+        white-space: pre-wrap;       
+        white-space: -moz-pre-wrap;  
+        white-space: -pre-wrap;      
+        white-space: -o-pre-wrap;    
+        word-wrap: break-word;    
       }
     "))),
   tags$script(
@@ -43,16 +44,16 @@ ui <- fluidPage(
           actionButton("run_query", "Run Query")
       ), 
       div(style = "display: flex;",
-          actionButton("stop", "Stop Generating"),
           actionButton("clear", "Clear")
       ) 
     ),
     mainPanel(
       fluidRow(
-        column(6, selectizeInput("model", label = "Select Model", 
+        column(3, selectizeInput("model", label = "Select Model", 
                                  choices = c("gpt-4o", "gpt-4", "gpt-3.5-turbo"), 
                                  selected = "gpt-4o", multiple = FALSE)),
-        column(6, fileInput("file", "Input Prompt File"))
+        column(3, fileInput("file", "Input Prompt File")), 
+        column(3, offset = 3, actionButton("help", "Help")) #style = "margin-top: -60px; margin-left: 300px;"))
       ), 
       actionButton("prompt", "Show Prompt"), 
       actionButton("copy_response", "Copy Response"),
@@ -63,12 +64,16 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
+
   observe({
-    req(input$file)
-    text <- readLines(input$file$datapath)
-    loaded_text(text)
-    
-    #toggleState("run_query", input$run_query == "" | is.null(input$run_query))
+    if(is.null(input$file)) {
+      text <- readLines(Sys.getenv("DEFAULT_PROMPT"))
+      loaded_text(text)
+    } else {
+      req(input$file)
+      text <- readLines(input$file$datapath)
+      loaded_text(text)
+    }
     
     assistant_response <- AI_content()
     output$assistant <- renderText({
@@ -87,22 +92,19 @@ server <- function(input, output, session) {
   
   observeEvent(input$run_query, {
     output$assistant <- renderText({""})
-    #disable("run_query")
     prompt_text <- paste(loaded_text(), collapse = "\n")
     user_message <- input$geneMessage
     AI_content(list())
-   
+    
     withProgress(message = 'Generating response using OpenAI...', value = 0, {
       assistant_response <- create_chat_completion(
         model = input$model,
         messages = list(list("role" = "user", "content" = prompt_text), list("role" = "user", "content" = user_message)),
         temperature = input$temperature,
-        openai_api_key = Sys.getenv("openai_api_key")
+        openai_api_key = "XXXXXX"
       )
     })
     
-    #enable("run_query")
-  
     assistant_response$user_message <- user_message
     AI_content(assistant_response)
     
@@ -135,8 +137,13 @@ server <- function(input, output, session) {
     session$sendCustomMessage(type = "copyToClipboard", message = paste0("\n", assistant_response$choices$message.content, "\n\nYour Input: ", assistant_response$user_message, "\n\nModel: ", assistant_response$model, "\n\nToken use: ", assistant_response$usage$total_tokens))
   })
   
-  observeEvent(input$stop, {
-    
+  observeEvent(input$help, {
+    help_text <- readLines("help.txt")
+    showModal(modalDialog(
+      title = "Help",
+      HTML(paste(help_text, collapse = "<br>")),
+      footer = modalButton("Close")
+    ))
   })
   
 }
