@@ -1,11 +1,12 @@
 library(shiny)
-library(shinyjs)
 library(openai)
+library(rvest)
+
 
 AI_content <- reactiveVal(list())
 loaded_text <- reactiveVal()
 
-Sys.setenv(OPENAI_API_KEY = 'XXXXXXX')
+Sys.setenv(OPENAI_API_KEY = 'XXXXXX')
 Sys.setenv(DEFAULT_PROMPT = 'prompt.txt')
 
 
@@ -45,18 +46,19 @@ ui <- fluidPage(
       ), 
       div(style = "display: flex;",
           actionButton("clear", "Clear")
-      ) 
+      )
     ),
     mainPanel(
-      fluidRow(
-        column(3, selectizeInput("model", label = "Select Model", 
-                                 choices = c("gpt-4o", "gpt-4", "gpt-3.5-turbo"), 
-                                 selected = "gpt-4o", multiple = FALSE)),
-        column(3, fileInput("file", "Input Prompt File (Optional)")), 
-        column(3, offset = 3, actionButton("help", "Help")) #style = "margin-top: -60px; margin-left: 300px;"))
-      ), 
+      selectizeInput("model", "Select Model", 
+                     choices = c("gpt-4o", "gpt-4", "gpt-3.5-turbo"), 
+                     selected = "gpt-4o", multiple = FALSE), 
+      actionButton("toggle_file_input", "Optional Prompt Input"),
+      conditionalPanel(
+        condition = "output.showFileInput == true", 
+        fileInput("file", "Input Prompt File")),
       actionButton("prompt", "Show Prompt"), 
       actionButton("copy_response", "Copy Response"),
+      actionButton("help", "Help"),
       titlePanel("Response"), 
       verbatimTextOutput("assistant")
     )
@@ -64,6 +66,18 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
+  
+  showFileInput <- reactiveVal(FALSE)
+  
+  output$showFileInput <- reactive({
+    showFileInput()
+  })
+  outputOptions(output, "showFileInput", suspendWhenHidden = FALSE)
+  
+  observeEvent(input$toggle_file_input, {
+    showFileInput(!showFileInput())
+  })
+  
 
   observe({
     if(is.null(input$file)) {
@@ -88,6 +102,10 @@ server <- function(input, output, session) {
   observeEvent(input$clear, {
     AI_content(list())
     updateTextAreaInput(session, "geneMessage", value = "")
+    text <- readLines(Sys.getenv("DEFAULT_PROMPT"))
+    loaded_text(text)
+    showFileInput(FALSE)
+    reset("file")
   })
   
   observeEvent(input$run_query, {
@@ -101,7 +119,7 @@ server <- function(input, output, session) {
         model = input$model,
         messages = list(list("role" = "user", "content" = prompt_text), list("role" = "user", "content" = user_message)),
         temperature = input$temperature,
-        openai_api_key = "XXXXXXXX"
+        openai_api_key = "XXXXXX"
       )
     })
     
@@ -138,7 +156,8 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$help, {
-    help_text <- readLines("help.txt")
+    help_text <-read_html("help2.html")
+    #help_text <- docx_summary(doc)$text
     showModal(modalDialog(
       title = "Help",
       HTML(paste(help_text, collapse = "<br>")),
